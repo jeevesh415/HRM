@@ -1,0 +1,35 @@
+# V-JEPA 10B Parameter Configuration
+encoder:
+  img_size: 224
+  patch_size: [2, 16, 16]
+  in_chans: 3
+  embed_dim: 4096
+  depth: 32
+  num_heads: 32
+  expansion: 4.0
+  max_t: 16
+  max_h: 14
+  max_w: 14
+
+predictor:
+  # HRM Config
+  H_cycles: 4
+  L_cycles: 8
+  H_layers: 12
+  L_layers: 24
+  hidden_size: 4096
+  expansion: 4.0
+  num_heads: 32
+  pos_encodings: "rope"
+  halt_max_steps: 8
+  halt_exploration_prob: 0.1
+  forward_dtype: "bfloat16"
+
+training:
+  batch_size: 1
+  global_batch_size: 1024 # Target for multi-node training
+  lr: 1e-4
+  ema_momentum: 0.996
+  sim_coeff: 25.0
+  std_coeff: 25.0
+  cov_coeff: 1.0
