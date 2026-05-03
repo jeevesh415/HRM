@@ -25,26 +25,6 @@ class LatentPlannerMCTS:
         self.model = model
         self.n_simulations = n_simulations
 
-    def plan(self, initial_state: torch.Tensor, available_actions: torch.Tensor):
-        root = MCTSNode(state=initial_state)
-
-        for _ in range(self.n_simulations):
-            node = root
-            
-            # 1. Selection
-            while node.children:
-                node = max(node.children, key=lambda c: c.ucb_score(node.visits))
-
-            # 2. Expansion & Simulation
-            # Use HRM to predict the next latent state given an action
-            next_state, value = self._imagine_future(node.state, available_actions)
-            
-            # 3. Backpropagation
-            self._backpropagate(node, value)
-            
-        # Return action from best child
-        return max(root.children, key=lambda c: c.visits).action
-
     @torch.no_grad()
     def _imagine_future(self, state, action):
         """

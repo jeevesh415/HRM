@@ -3,7 +3,8 @@ import yaml
 import torch
 from torch import nn
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, BackwardPrefetch
 from torch.utils.data import DataLoader
 # import wandb
 
@@ -30,6 +31,15 @@ def train(config_path="config/vjepa_micro.yaml"):
         config["training"]["ema_momentum"],
         action_dim=action_dim
     ).to(device)
+    
+    # SOTA 10B Scaling: Fully Sharded Data Parallel (FSDP)
+    if dist.is_initialized() and dist.get_world_size() > 1:
+        model = FSDP(
+            model,
+            cpu_offload=CPUOffload(offload_params=True),
+            backward_prefetch=BackwardPrefetch.BACKWARD_PRE
+        )
+        
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["lr"]))
 
     # 4. Data Manifold

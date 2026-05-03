@@ -9,3 +9,6 @@ wandb
 omegaconf
 hydra-core
 huggingface_hub
+torchdiffeq
+geoopt
+nerfacc
