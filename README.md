@@ -15,8 +15,9 @@ Transitioning from discrete puzzle-solving to continuous-time, latent-space reas
 ### 2. Physical Relativity (Lie Group Equivariance)
 *   **Stiefel Manifold Projections**: Implements $O(D)$ complexity equivariant transformations using Cayley transforms, ensuring physical laws are relative across 10B parameter manifolds.
 
-### 3. Continuous-Time Brain (Neural ODEs & Predictive Coding)
-*   **Adjoint Neural ODEs**: Uses the **Neural ODE Adjoint Method** for constant-memory backpropagation, enabling infinite-depth continuous reasoning at 10B scale.
+### 3. Continuous-Time Brain (Hamiltonian Neural ODEs & Predictive Coding)
+*   **Symplectic Physics Engine (HNN)**: Uses **Hamiltonian Neural Networks** to compute the continuous-time dynamics ($dq/dt$, $dp/dt$). This guarantees absolute energy conservation and strict adherence to classical mechanics within the latent imagination space.
+*   **Adjoint Neural ODEs**: Uses the **Neural ODE Adjoint Method** (`torchdiffeq`) for constant-memory backpropagation, enabling infinite-depth continuous reasoning at 10B scale.
 *   **Top-Down Predictive Coding**: A hierarchical "handshake" where High-Level planning ($z_H$) suppresses error signals from Low-Level sensors ($z_L$), mimicking the human visual cortex.
 *   **Holographic Memory**: Vector Symbolic Architecture (VSA) based memory that binds and stores complex physical experiences into dense, high-dimensional holographic states.
 
