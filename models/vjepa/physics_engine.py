@@ -5,34 +5,58 @@ from torchdiffeq import odeint_adjoint as odeint
 
 class HRMPhysicsODE(nn.Module):
     """
-    The 'Derivative' function for our Neural ODE.
-    It computes the change in the latent state (dz/dt) based on current state and input.
+    SOTA Hamiltonian Neural Network (HNN) Physics Engine.
+    Computes continuous-time latent dynamics using exact Hamiltonian mechanics
+    to guarantee conservation of energy and symplectic structure in the latent space.
     """
     def __init__(self, dim: int, action_dim: Optional[int] = 128):
         super().__init__()
-        # If action is provided, we expand the input dimension
+        # For Hamiltonian mechanics, the latent state is split into position (q) and momentum (p)
+        assert dim % 2 == 0, "Latent dimension must be even to split into (q, p) pairs."
+        
         input_dim = dim + (action_dim if action_dim else 0)
-        self.net = nn.Sequential(
+        # The network predicts the total 'Energy' (Hamiltonian) of the system: H(q, p) -> R
+        self.energy_net = nn.Sequential(
             nn.Linear(input_dim, dim * 2),
             nn.SiLU(),
-            nn.Linear(dim * 2, dim)
+            nn.Linear(dim * 2, dim),
+            nn.SiLU(),
+            nn.Linear(dim, 1) # Outputs a scalar energy value per sequence token
         )
-        self.norm = nn.LayerNorm(dim)
         
         # Action is cached here for the duration of the integration step
         self.current_action = None
 
     def forward(self, t: float, z: torch.Tensor) -> torch.Tensor:
-        # Time-conditioned latent update incorporating action
-        action = self.current_action
-        if action is not None:
-            if action.ndim < z.ndim:
-                action = action.view(action.shape + (1,) * (z.ndim - action.ndim)).expand_as(z[..., :action.shape[-1]])
-            z_input = torch.cat([z, action], dim=-1)
-        else:
-            z_input = z
+        # Enable grad to compute conservative vector fields via autograd
+        with torch.enable_grad():
+            z = z.requires_grad_(True)
             
-        return self.norm(self.net(z_input))
+            action = self.current_action
+            if action is not None:
+                if action.ndim < z.ndim:
+                    action = action.view(action.shape + (1,) * (z.ndim - action.ndim)).expand_as(z[..., :action.shape[-1]])
+                z_input = torch.cat([z, action], dim=-1)
+            else:
+                z_input = z
+                
+            # Compute total system energy
+            energy = self.energy_net(z_input).sum()
+            
+            # Compute partial derivatives of energy with respect to latent state (q, p)
+            dz = torch.autograd.grad(energy, z, create_graph=True)[0]
+            
+            # Split gradients into dq and dp
+            q_dim = z.shape[-1] // 2
+            dH_dq, dH_dp = dz[..., :q_dim], dz[..., q_dim:]
+            
+            # Hamiltonian Equations of Motion:
+            # dq/dt = dH/dp
+            # dp/dt = -dH/dq
+            dq_dt = dH_dp
+            dp_dt = -dH_dq
+            
+            return torch.cat([dq_dt, dp_dt], dim=-1)
 
 class ContinuousTimeHRM(nn.Module):
     """
