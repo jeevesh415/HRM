@@ -1,0 +1,34 @@
+# V-JEPA Micro-Scale Verification Configuration
+encoder:
+  img_size: 64
+  patch_size: [2, 8, 8]
+  in_chans: 3
+  embed_dim: 128
+  depth: 4
+  num_heads: 4
+  expansion: 2.0
+  max_t: 8
+  max_h: 8
+  max_w: 8
+
+predictor:
+  H_cycles: 1
+  L_cycles: 2
+  H_layers: 2
+  L_layers: 4
+  hidden_size: 128
+  expansion: 2.0
+  num_heads: 4
+  pos_encodings: "rope"
+  halt_max_steps: 4
+  halt_exploration_prob: 0.1
+  forward_dtype: "float32"
+
+training:
+  batch_size: 1
+  global_batch_size: 1
+  lr: 1e-3
+  ema_momentum: 0.99
+  sim_coeff: 1.0
+  std_coeff: 1.0
+  cov_coeff: 0.1

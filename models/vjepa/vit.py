@@ -25,6 +25,8 @@ class PatchEmbed3D(nn.Module):
         x = x.flatten(2).transpose(1, 2) # (bs, t*h*w, D)
         return x, (t, h, w)
 
+from torch.utils.checkpoint import checkpoint
+
 class VisionTransformerBlock(nn.Module):
     def __init__(self, dim, num_heads, expansion, norm_eps=1e-5):
         super().__init__()
@@ -38,11 +40,16 @@ class VisionTransformerBlock(nn.Module):
         self.mlp = SwiGLU(hidden_size=dim, expansion=expansion)
         self.norm_eps = norm_eps
 
-    def forward(self, x, cos_sin):
-        # x: (bs, seq_len, dim)
+    def _forward_inner(self, x, cos_sin):
         x = rms_norm(x + self.attn(cos_sin, x), self.norm_eps)
         x = rms_norm(x + self.mlp(x), self.norm_eps)
         return x
+
+    def forward(self, x, cos_sin):
+        # x: (bs, seq_len, dim)
+        if self.training:
+            return checkpoint(self._forward_inner, x, cos_sin, use_reentrant=False)
+        return self._forward_inner(x, cos_sin)
 
 class VisionEncoder(nn.Module):
     def __init__(self, 
@@ -57,6 +64,9 @@ class VisionEncoder(nn.Module):
                  max_h=14, # 224/16
                  max_w=14):
         super().__init__()
+        self.max_t = max_t
+        self.max_h = max_h
+        self.max_w = max_w
         self.patch_embed = PatchEmbed3D(patch_size, in_chans, embed_dim)
         
         self.rope = RotaryEmbedding3D(

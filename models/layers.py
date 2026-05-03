@@ -7,8 +7,18 @@ import torch.nn.functional as F
 try:
     from flash_attn_interface import flash_attn_func  # type: ignore[import]
 except ImportError:
-    # Fallback to FlashAttention 2
-    from flash_attn import flash_attn_func  # type: ignore[import]
+    try:
+        from flash_attn import flash_attn_func  # type: ignore[import]
+    except ImportError:
+        def flash_attn_func(q, k, v, causal=False):
+            # Fallback to standard PyTorch attention
+            # q, k, v shape: [bs, seq_len, num_heads, head_dim]
+            # scaled_dot_product_attention expects: [bs, num_heads, seq_len, head_dim]
+            q = q.transpose(1, 2)
+            k = k.transpose(1, 2)
+            v = v.transpose(1, 2)
+            out = F.scaled_dot_product_attention(q, k, v, is_causal=causal)
+            return out.transpose(1, 2)
 
 from models.common import trunc_normal_init_
 
