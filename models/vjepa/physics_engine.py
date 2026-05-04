@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from typing import Callable, Tuple, Optional
+from typing import Optional
 from torchdiffeq import odeint_adjoint as odeint
 
 class HRMPhysicsODE(nn.Module):
@@ -68,13 +68,40 @@ class ContinuousTimeHRM(nn.Module):
         super().__init__()
         self.ode_func = HRMPhysicsODE(dim, action_dim)
 
-    def forward(self, z: torch.Tensor, delta_t: float = 1.0, action: Optional[torch.Tensor] = None):
-        # Evolve using the true Adjoint Method with dopri5 adaptive solver
-        self.ode_func.current_action = action
-        
-        t = torch.tensor([0.0, delta_t], device=z.device, dtype=z.dtype)
-        # odeint_adjoint handles O(1) memory backprop and adaptive steps perfectly
-        zt1 = odeint(self.ode_func, z, t, method='dopri5')
-        
+    def forward(self, z: torch.Tensor, delta_t: torch.Tensor | float = 1.0, action: Optional[torch.Tensor] = None):
+        # Scalar horizon path.
+        if not torch.is_tensor(delta_t):
+            self.ode_func.current_action = action
+            t = torch.tensor([0.0, float(delta_t)], device=z.device, dtype=z.dtype)
+            zt1 = odeint(self.ode_func, z, t, method='dopri5')
+            self.ode_func.current_action = None
+            return zt1[-1]
+
+        # Tensor horizon path: keep sample-specific dt while minimizing solver calls.
+        if delta_t.ndim == 0:
+            delta_t = delta_t.expand(z.shape[0])
+        else:
+            delta_t = delta_t.reshape(z.shape[0], -1).mean(dim=-1)
+        delta_t = delta_t.to(device=z.device, dtype=z.dtype)
+
+        # Fast path: all samples share one horizon => one batched ODE solve.
+        if torch.allclose(delta_t, delta_t[0].expand_as(delta_t)):
+            self.ode_func.current_action = action
+            t = torch.stack([torch.zeros((), device=z.device, dtype=z.dtype), delta_t[0]])
+            zt1 = odeint(self.ode_func, z, t, method='dopri5')
+            self.ode_func.current_action = None
+            return zt1[-1]
+
+        # Group by unique horizons to reduce Python-loop overhead.
+        evolved = torch.empty_like(z)
+        unique_dt, inverse = torch.unique(delta_t, sorted=False, return_inverse=True)
+        for group_idx, dt in enumerate(unique_dt):
+            idx = torch.nonzero(inverse == group_idx, as_tuple=False).squeeze(-1)
+            self.ode_func.current_action = None if action is None else action.index_select(0, idx)
+            t = torch.stack([torch.zeros((), device=z.device, dtype=z.dtype), dt])
+            z_group = z.index_select(0, idx)
+            zt1 = odeint(self.ode_func, z_group, t, method='dopri5')
+            evolved.index_copy_(0, idx, zt1[-1])
+
         self.ode_func.current_action = None
-        return zt1[-1]  # Return state at t=delta_t
+        return evolved

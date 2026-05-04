@@ -81,9 +81,14 @@ class VJEPA(nn.Module):
         full_cos, full_sin = self.context_encoder.rope(self.context_encoder.max_t, self.context_encoder.max_h, self.context_encoder.max_w)
         
         # Index cos_sin for masked positions
-        m = mask[0] if mask.ndim == 2 else mask
-        masked_cos = full_cos[m]
-        masked_sin = full_sin[m]
+        if mask.ndim == 1:
+            masked_cos = full_cos[mask]
+            masked_sin = full_sin[mask]
+        else:
+            # Support per-sample masks by building batched RoPE tensors.
+            masked_cos = torch.stack([full_cos[m_i] for m_i in mask], dim=0)
+            masked_sin = torch.stack([full_sin[m_i] for m_i in mask], dim=0)
+
         masked_cos_sin = (masked_cos, masked_sin)
 
         # Predict masked latents
