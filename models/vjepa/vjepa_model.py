@@ -7,6 +7,7 @@ from typing import Dict, Tuple, Optional
 from models.vjepa.vit import VisionEncoder
 from models.vjepa.predictor import VJEPAPredictorInner
 from models.vjepa.utils import apply_mask
+from models.adaptive_depth import AdaptiveDepthController
 
 class VJEPA(nn.Module):
     """
@@ -60,6 +61,13 @@ class VJEPA(nn.Module):
             nn.Linear(predictor_config["hidden_size"], 1)
         )
 
+        # 6. Adaptive depth controller for test-time compute scaling
+        self.depth_controller = AdaptiveDepthController(
+            max_depth=predictor_config.get("halt_max_steps", 8),
+            confidence_threshold=predictor_config.get("confidence_threshold", 0.95),
+            uncertainty_threshold=predictor_config.get("uncertainty_threshold", 0.7),
+        )
+
     @torch.no_grad()
     def update_target_encoder(self):
         """EMA update for the target network."""
@@ -100,10 +108,12 @@ class VJEPA(nn.Module):
         # Predict masked latents
         predicted_latents = self.predictor(
             context_latents=context_latents,
-            target_queries=target_latents_masked, 
+            target_queries=target_latents_masked,
             cos_sin=masked_cos_sin,
             delta_t=delta_t,
-            action=action
+            action=action,
+            audio_features=batch.get("audio", None),
+            tactile_features=batch.get("tactile", None),
         )
 
         # Value estimation of the predicted future

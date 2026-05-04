@@ -10,6 +10,8 @@ from models.vjepa.physics_engine import ContinuousTimeHRM
 from models.vjepa.gaussian_splatting import LatentGaussianSplatting
 from models.vjepa.flow_matching import ConditionalFlowMatching
 from models.vjepa.symplectic_integrator import SymplecticEulerIntegrator
+from models.ttt_layer import TTTLinearWithAttention
+from models.multimodal_grounding import MultiModalGrounding
 
 
 class VJEPAPredictorInner(nn.Module):
@@ -62,6 +64,22 @@ class VJEPAPredictorInner(nn.Module):
         if use_flow_matching:
             self.flow_matching = ConditionalFlowMatching(dim, condition_dim=dim)
 
+        # Test-Time Training layer for adaptive reasoning
+        self.ttt_layer = TTTLinearWithAttention(
+            dim=dim,
+            num_heads=num_heads,
+            inner_lr=0.1,
+            num_inner_steps=1,
+        )
+
+        # Multi-modal grounding
+        self.multimodal = MultiModalGrounding(
+            dim=dim,
+            num_heads=num_heads,
+            audio_input_dim=128,
+            tactile_input_dim=64,
+        )
+
         # Hierarchical Reasoning Modules
         self.H_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
         self.L_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
@@ -69,14 +87,15 @@ class VJEPAPredictorInner(nn.Module):
         self.mlp = SwiGLU(dim, expansion)
         self.norm_eps = 1e-5
 
-    def forward(self, 
-                context_latents: torch.Tensor, 
-                target_queries: torch.Tensor, 
+    def forward(self,
+                context_latents: torch.Tensor,
+                target_queries: torch.Tensor,
                 cos_sin: Tuple[torch.Tensor, torch.Tensor],
                 delta_t: torch.Tensor,
                 action: Optional[torch.Tensor] = None,
                 group_element: Optional[torch.Tensor] = None,
-                ray_dirs: Optional[torch.Tensor] = None):
+                ray_dirs: Optional[torch.Tensor] = None,
+                **kwargs):
         """
         context_latents: (bs, num_visible, D)
         target_queries: (bs, num_masked, D)
@@ -92,6 +111,16 @@ class VJEPAPredictorInner(nn.Module):
         if group_element is None:
             group_element = torch.zeros(bs, 3, device=context_latents.device)
         context_latents = self.equivariant_layer(context_latents, group_element)
+
+        # 1.5 Multi-modal grounding (if audio/tactile available)
+        audio_features = kwargs.get('audio_features', None)
+        tactile_features = kwargs.get('tactile_features', None)
+        if audio_features is not None or tactile_features is not None:
+            context_latents = self.multimodal(
+                context_latents,
+                audio_features=audio_features,
+                tactile_features=tactile_features,
+            )
 
         # 2. Holographic Binding: Create dense world state
         world_state = self.memory(context_latents, context_latents) # (bs, D)
@@ -130,6 +159,11 @@ class VJEPAPredictorInner(nn.Module):
                 z_L = rms_norm(z_L + self.L_attn(cos_sin, z_L + prediction[:, :num_masked]), self.norm_eps)
             
             z_L = rms_norm(z_L + self.mlp(z_L), self.norm_eps)
+
+        # 4.5 Test-Time Training refinement
+        # TTT adapts the representation in real-time based on the input
+        # This is the "thinking harder" mechanism
+        z_L = self.ttt_layer(z_L)
 
         # 5. Light & Shadow: 3D Gaussian Splatting + Ray Marching
         if self.use_gaussian_splatting:

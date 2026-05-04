@@ -35,6 +35,21 @@ predictor:
   # Symplectic Integrator (for exact energy conservation at inference)
   use_symplectic: true
 
+  # Test-Time Training
+  use_ttt: true
+  ttt_inner_lr: 0.1
+  ttt_inner_steps: 1
+
+  # Adaptive Depth
+  adaptive_depth: true
+  confidence_threshold: 0.95
+  uncertainty_threshold: 0.7
+
+  # Multi-modal Grounding
+  use_multimodal: true
+  audio_input_dim: 128
+  tactile_input_dim: 64
+
 training:
   batch_size: 1
   global_batch_size: 1024 # Target for multi-node training
