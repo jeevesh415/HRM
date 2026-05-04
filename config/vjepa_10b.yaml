@@ -50,6 +50,25 @@ predictor:
   audio_input_dim: 128
   tactile_input_dim: 64
 
+  # Mathematical Foundations for Human-Level Vision
+  use_information_bottleneck: true
+  ib_beta: 1e-3
+
+  use_spectral_conv: true
+  spectral_num_filters: 4
+  spectral_polynomial_order: 3
+
+  use_topology: true
+  topology_filtration_steps: 16
+
+  use_proper_se3: true
+  se3_num_frequencies: 16
+  se3_l_max: 2
+
+  use_uncertainty: true
+  uncertainty_mc_samples: 10
+  uncertainty_dropout: 0.1
+
 training:
   batch_size: 1
   global_batch_size: 1024 # Target for multi-node training

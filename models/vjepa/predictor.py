@@ -12,6 +12,11 @@ from models.vjepa.flow_matching import ConditionalFlowMatching
 from models.vjepa.symplectic_integrator import SymplecticEulerIntegrator
 from models.ttt_layer import TTTLinearWithAttention
 from models.multimodal_grounding import MultiModalGrounding
+from models.information_bottleneck import InformationBottleneckAttention
+from models.spectral_conv import SpectralGraphConv
+from models.topological import TopologicalAwareness
+from models.proper_equivariance import ProperSE3EquivariantLayer
+from models.uncertainty import UncertaintyQuantification
 
 
 class VJEPAPredictorInner(nn.Module):
@@ -31,6 +36,20 @@ class VJEPAPredictorInner(nn.Module):
                  use_flow_matching: bool = True,
                  use_symplectic: bool = True,
                  num_gaussians: int = 256,
+                 # Mathematical Foundations
+                 use_information_bottleneck: bool = True,
+                 ib_beta: float = 1e-3,
+                 use_spectral_conv: bool = True,
+                 spectral_num_filters: int = 4,
+                 spectral_polynomial_order: int = 3,
+                 use_topology: bool = True,
+                 topology_filtration_steps: int = 16,
+                 use_proper_se3: bool = True,
+                 se3_num_frequencies: int = 16,
+                 se3_l_max: int = 2,
+                 use_uncertainty: bool = True,
+                 uncertainty_mc_samples: int = 10,
+                 uncertainty_dropout: float = 0.1,
                  ):
         super().__init__()
         self.dim = dim
@@ -80,6 +99,53 @@ class VJEPAPredictorInner(nn.Module):
             tactile_input_dim=64,
         )
 
+        # Mathematical Foundations for Human-Level Vision
+
+        # Information Bottleneck for perception
+        self.use_information_bottleneck = use_information_bottleneck
+        if use_information_bottleneck:
+            self.ib_attention = InformationBottleneckAttention(
+                dim=dim,
+                num_heads=num_heads,
+                beta=ib_beta,
+            )
+
+        # Spectral multi-scale processing
+        self.use_spectral_conv = use_spectral_conv
+        if use_spectral_conv:
+            self.spectral_conv = SpectralGraphConv(
+                dim=dim,
+                num_filters=spectral_num_filters,
+                polynomial_order=spectral_polynomial_order,
+            )
+
+        # Topological awareness
+        self.use_topology = use_topology
+        if use_topology:
+            self.topology = TopologicalAwareness(
+                dim=dim,
+                num_filtration_steps=topology_filtration_steps,
+            )
+
+        # Proper SE(3) equivariance
+        self.use_proper_se3 = use_proper_se3
+        if use_proper_se3:
+            self.se3_equivariant = ProperSE3EquivariantLayer(
+                dim=dim,
+                num_frequencies=se3_num_frequencies,
+                l_max=se3_l_max,
+            )
+
+        # Uncertainty quantification
+        self.use_uncertainty = use_uncertainty
+        self._ib_kl_loss: Optional[torch.Tensor] = None
+        if use_uncertainty:
+            self.uncertainty = UncertaintyQuantification(
+                dim=dim,
+                num_mc_samples=uncertainty_mc_samples,
+                dropout_rate=uncertainty_dropout,
+            )
+
         # Hierarchical Reasoning Modules
         self.H_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
         self.L_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
@@ -121,6 +187,21 @@ class VJEPAPredictorInner(nn.Module):
                 audio_features=audio_features,
                 tactile_features=tactile_features,
             )
+
+        # 1.6 Multi-scale spectral processing
+        if self.use_spectral_conv:
+            context_latents = self.spectral_conv(context_latents)
+
+        # 1.7 Topological enrichment
+        if self.use_topology:
+            context_latents, topo_info = self.topology(context_latents)
+
+        # 1.8 Uncertainty quantification
+        if self.use_uncertainty:
+            uncertainty_out = self.uncertainty(context_latents)
+            context_latents = uncertainty_out['output']
+            # Store KL loss for training
+            self._ib_kl_loss = uncertainty_out['kl_loss']
 
         # 2. Holographic Binding: Create dense world state
         world_state = self.memory(context_latents, context_latents) # (bs, D)
