@@ -73,11 +73,16 @@ class VJEPAPredictorInner(nn.Module):
 
         # 3. Continuous-Time Evolution (Neural ODE)
         # Condition the physics engine on the action if provided
-        evolved_state = self.physics_engine(world_state, delta_t.mean().item(), action=action) # (bs, D)
+        evolved_state = self.physics_engine(world_state, delta_t, action=action) # (bs, D)
 
-        # 4. Top-Down Predictive Coding Loop
+        # 4. Memory Recall + Predictive Coding Loop
+        # Retrieve context-conditioned priors for each target token, then combine with
+        # evolved global dynamics for top-down planning.
+        mem_bank = world_state.unsqueeze(1).expand(-1, num_masked, -1)
+        memory_recall = self.memory.retrieve(mem_bank, target_queries)
+
         # z_H plans, z_L computes. Error signals flow bottom-up.
-        z_H = evolved_state.unsqueeze(1).expand(-1, num_masked, -1)
+        z_H = 0.5 * (evolved_state.unsqueeze(1).expand(-1, num_masked, -1) + memory_recall)
         z_L = target_queries 
 
         for _h in range(self.h_cycles):
