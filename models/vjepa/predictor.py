@@ -7,11 +7,16 @@ from models.layers import Attention, SwiGLU, rms_norm
 from models.vjepa.layers import apply_rotary_pos_emb_3d, LieGroupEquivariantLayer, LatentRayMarcher
 from models.vjepa.memory import HolographicMemory
 from models.vjepa.physics_engine import ContinuousTimeHRM
+from models.vjepa.gaussian_splatting import LatentGaussianSplatting
+from models.vjepa.flow_matching import ConditionalFlowMatching
+from models.vjepa.symplectic_integrator import SymplecticEulerIntegrator
+
 
 class VJEPAPredictorInner(nn.Module):
     """
     The mathematical core of the V-JEPA Predictor.
-    Integrates Holographic Memory, Neural ODEs, Equivariance, and Latent Ray-Marching.
+    Integrates Holographic Memory, Neural ODEs, Equivariance, Latent Ray-Marching,
+    3D Gaussian Splatting, Flow Matching, and Symplectic Integration.
     """
     def __init__(self, 
                  dim: int, 
@@ -19,15 +24,25 @@ class VJEPAPredictorInner(nn.Module):
                  expansion: float,
                  h_cycles: int,
                  l_cycles: int,
-                 action_dim: int = 128):
+                 action_dim: int = 128,
+                 use_gaussian_splatting: bool = True,
+                 use_flow_matching: bool = True,
+                 use_symplectic: bool = True,
+                 num_gaussians: int = 256,
+                 ):
         super().__init__()
         self.dim = dim
         self.h_cycles = h_cycles
         self.l_cycles = l_cycles
 
-        # Continuous-Time Physics Engine (Neural ODE)
+        # Continuous-Time Physics Engine (Neural ODE) - default
         self.physics_engine = ContinuousTimeHRM(dim, action_dim)
-        
+
+        # Symplectic Integrator - alternative for strict energy conservation
+        self.use_symplectic = use_symplectic
+        if use_symplectic:
+            self.symplectic_integrator = SymplecticEulerIntegrator(dim, action_dim)
+
         # High-Dimensional Holographic Memory (VSA)
         self.memory = HolographicMemory(dim)
 
@@ -36,6 +51,16 @@ class VJEPAPredictorInner(nn.Module):
         
         # Differentiable Latent Ray-Marcher for Light/Shadow intuition
         self.ray_marcher = LatentRayMarcher(dim)
+
+        # 3D Gaussian Splatting renderer (replaces/supplements NeRF ray marcher)
+        self.use_gaussian_splatting = use_gaussian_splatting
+        if use_gaussian_splatting:
+            self.gaussian_splatting = LatentGaussianSplatting(dim, num_gaussians)
+
+        # Flow Matching engine (alternative to Neural ODE for dynamics)
+        self.use_flow_matching = use_flow_matching
+        if use_flow_matching:
+            self.flow_matching = ConditionalFlowMatching(dim, condition_dim=dim)
 
         # Hierarchical Reasoning Modules
         self.H_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
@@ -71,13 +96,19 @@ class VJEPAPredictorInner(nn.Module):
         # 2. Holographic Binding: Create dense world state
         world_state = self.memory(context_latents, context_latents) # (bs, D)
 
-        # 3. Continuous-Time Evolution (Neural ODE)
-        # Condition the physics engine on the action if provided
-        evolved_state = self.physics_engine(world_state, delta_t, action=action) # (bs, D)
+        # 3. Continuous-Time Evolution
+        # Choose between Neural ODE and Symplectic Integrator
+        if self.use_symplectic and not self.training:
+            # Symplectic integrator for inference (exact energy conservation)
+            self.symplectic_integrator.set_action(action)
+            evolved_state = self.symplectic_integrator(world_state, dt=1.0, steps=10)
+            self.symplectic_integrator.set_action(None)
+        else:
+            # Neural ODE for training (adaptive step-size, backprop-friendly)
+            evolved_state = self.physics_engine(world_state, delta_t, action=action)
 
         # 4. Memory Recall + Predictive Coding Loop
-        # Retrieve context-conditioned priors for each target token, then combine with
-        # evolved global dynamics for top-down planning.
+        # Retrieve context-conditioned priors for each target token
         mem_bank = world_state.unsqueeze(1).expand(-1, num_masked, -1)
         memory_recall = self.memory.retrieve(mem_bank, target_queries)
 
@@ -87,27 +118,28 @@ class VJEPAPredictorInner(nn.Module):
 
         for _h in range(self.h_cycles):
             # Predictive Coding Handshake
-            # High-Level generates a prediction (Top-Down)
             prediction = rms_norm(z_H + self.H_attn(cos_sin, z_H), self.norm_eps)
             
             # Prediction Error (Bottom-Up)
-            error = z_L - prediction[:, :num_masked] # Simplified error signal
+            error = z_L - prediction[:, :num_masked]
             
             # High-Level updates itself to 'suppress' the error
-            z_H = z_H + error.mean(dim=1, keepdim=True) # Update global plan
+            z_H = z_H + error.mean(dim=1, keepdim=True)
             
             for _l in range(self.l_cycles):
-                # Low-Level refinement conditioned on Error Suppression
                 z_L = rms_norm(z_L + self.L_attn(cos_sin, z_L + prediction[:, :num_masked]), self.norm_eps)
             
-            # MLP Refinement
             z_L = rms_norm(z_L + self.mlp(z_L), self.norm_eps)
 
-        # 5. Light & Shadow Intuition: Latent Ray-Marching
+        # 5. Light & Shadow: 3D Gaussian Splatting + Ray Marching
+        if self.use_gaussian_splatting:
+            # Gaussian splatting for higher-quality rendering
+            splatted_features = self.gaussian_splatting(z_L, ray_dirs)
+            z_L = z_L + 0.5 * splatted_features
+
+        # Fallback/additional ray marching
         if ray_dirs is not None:
             shadow_features = self.ray_marcher(z_L, ray_dirs)
-            # Inject shadow features back into predicted latents
-            # This allows the model to 'see' light propagation
             z_L = z_L + shadow_features.mean(dim=-1, keepdim=True)
 
         return z_L 

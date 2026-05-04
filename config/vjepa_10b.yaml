@@ -25,6 +25,16 @@ predictor:
   halt_exploration_prob: 0.1
   forward_dtype: "bfloat16"
 
+  # 3D Gaussian Splatting
+  use_gaussian_splatting: true
+  num_gaussians: 256
+
+  # Flow Matching (alternative/supplement to Neural ODE)
+  use_flow_matching: true
+
+  # Symplectic Integrator (for exact energy conservation at inference)
+  use_symplectic: true
+
 training:
   batch_size: 1
   global_batch_size: 1024 # Target for multi-node training
@@ -33,3 +43,9 @@ training:
   sim_coeff: 25.0
   std_coeff: 25.0
   cov_coeff: 1.0
+  weight_decay: 0.1
+
+  # Optimizer: 'adamw', 'muon', or 'hybrid' (Muon for matrices, AdamW for biases/norms)
+  optimizer: "hybrid"
+  muon_momentum: 0.95
+  muon_ns_steps: 5

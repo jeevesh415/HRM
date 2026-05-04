@@ -12,6 +12,12 @@ class VJEPA(nn.Module):
     """
     Unified V-JEPA Model with HRM-ODE Predictor and Holographic Memory.
     Designed for 10B parameter physical world modeling.
+
+    Enhancements over base:
+      - 3D Gaussian Splatting latent renderer
+      - Flow Matching dynamics engine
+      - Symplectic integrator for energy conservation
+      - Muon optimizer support (configured externally)
     """
     def __init__(self, 
                  encoder_config: dict,
@@ -31,14 +37,17 @@ class VJEPA(nn.Module):
         self.ema_momentum = ema_momentum
         
         # 3. Predictor (The HRM-ODE Brain)
-        # We use the config values directly to avoid strict validation of unrelated HRM fields
         self.predictor = VJEPAPredictorInner(
             dim=predictor_config["hidden_size"],
             num_heads=predictor_config["num_heads"],
             expansion=predictor_config["expansion"],
             h_cycles=predictor_config["H_cycles"],
             l_cycles=predictor_config["L_cycles"],
-            action_dim=action_dim
+            action_dim=action_dim,
+            use_gaussian_splatting=predictor_config.get("use_gaussian_splatting", True),
+            use_flow_matching=predictor_config.get("use_flow_matching", True),
+            use_symplectic=predictor_config.get("use_symplectic", True),
+            num_gaussians=predictor_config.get("num_gaussians", 256),
         )
         
         # 4. Halting/ACT Head (inherited from HRM logic)
@@ -68,7 +77,6 @@ class VJEPA(nn.Module):
             target_latents = self.target_encoder(video) # (bs, seq_len, D)
             
         # 2. Generate Context Latents (Masked Video)
-        # For simplicity, we encode full video and then mask in latent space
         all_latents = self.context_encoder(video)
         
         # Extract visible patches for context
@@ -77,7 +85,6 @@ class VJEPA(nn.Module):
         _, target_truth_masked = apply_mask(target_latents, mask)
 
         # 3. Predictor Forward (Continuous-Time Reasoning)
-        # We need the 3D cos_sin for the masked positions
         full_cos, full_sin = self.context_encoder.rope(self.context_encoder.max_t, self.context_encoder.max_h, self.context_encoder.max_w)
         
         # Index cos_sin for masked positions
@@ -85,7 +92,6 @@ class VJEPA(nn.Module):
             masked_cos = full_cos[mask]
             masked_sin = full_sin[mask]
         else:
-            # Support per-sample masks by building batched RoPE tensors.
             masked_cos = torch.stack([full_cos[m_i] for m_i in mask], dim=0)
             masked_sin = torch.stack([full_sin[m_i] for m_i in mask], dim=0)
 

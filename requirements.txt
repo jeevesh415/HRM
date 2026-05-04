@@ -12,3 +12,5 @@ huggingface_hub
 torchdiffeq
 geoopt
 nerfacc
+# Muon optimizer is implemented in-repo (models/muon_optimizer.py)
+# No external package needed - uses pure PyTorch + Newton-Schulz iterations
