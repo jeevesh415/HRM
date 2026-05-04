@@ -65,6 +65,9 @@ class LatentGaussianSplatting(nn.Module):
             nn.Linear(dim, dim),
         )
 
+        # Learnable temperature for Gaussian kernel sharpness
+        self.temperature = nn.Parameter(torch.ones(1))
+
         # Initialize near-zero for stable early training
         nn.init.zeros_(self.gaussian_encoder[-1].weight)
         nn.init.zeros_(self.gaussian_encoder[-1].bias)
@@ -180,8 +183,8 @@ class LatentGaussianSplatting(nn.Module):
         diff = (points - means) / (scales + 1e-6)  # (bs, N, n, 3)
         mahal_dist = (diff ** 2).sum(dim=-1)        # (bs, N, n)
 
-        # Gaussian kernel: exp(-0.5 * d^2)
-        weights = torch.exp(-0.5 * mahal_dist)      # (bs, N, n)
+        # Gaussian kernel: exp(-0.5 * d^2 * temperature)
+        weights = torch.exp(-0.5 * mahal_dist * self.temperature.abs())  # (bs, N, n)
 
         # Weight by opacity
         opacities = gaussians["opacities"].squeeze(-1).unsqueeze(-1)  # (bs, N, 1)

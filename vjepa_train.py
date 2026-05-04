@@ -193,6 +193,7 @@ def train(config_path="config/vjepa_micro.yaml"):
             # Backward
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             # EMA Update

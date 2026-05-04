@@ -1,8 +1,8 @@
 """
 Hybrid SSM-Attention Architecture for Long-Range Reasoning.
 
-Implements a Selective State Space Model (Mamba-style) that operates in
-O(n) time and memory, combined with standard attention for precise local
+Implements a Selective State Space Model (Mamba-style) combined with
+standard attention for precise local
 reasoning. A learnable gate blends the two branches per-token.
 
 Based on:
@@ -27,10 +27,9 @@ class SelectiveSSM(nn.Module):
     """
     Selective State Space Model (Mamba-style) block.
 
-    Processes sequences in O(n) time with a recurrent state that is
-    selectively updated based on input content. Uses a short 1D
-    convolution for local context and a discretized SSM for global
-    state evolution.
+    Processes sequences with selective scan. Current implementation is
+    sequential for correctness; parallel scan (O(n)) can be implemented
+    via Blelloch prefix sum.
 
     Args:
         dim: input/output dimensionality.

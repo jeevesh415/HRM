@@ -353,6 +353,10 @@ class MCTS:
             best_action: (1, action_dim) the selected action.
             action_probs: (num_actions,) visit-count-based probabilities.
         """
+        # Handle empty action set
+        if available_actions.shape[0] == 0:
+            return torch.zeros(1, 0), torch.zeros(0)
+
         # Initialize root node
         root = MCTSNode(state=initial_state)
 

@@ -140,6 +140,6 @@ class VJEPAPredictorInner(nn.Module):
         # Fallback/additional ray marching
         if ray_dirs is not None:
             shadow_features = self.ray_marcher(z_L, ray_dirs)
-            z_L = z_L + shadow_features.mean(dim=-1, keepdim=True)
+            z_L = z_L + shadow_features
 
         return z_L 

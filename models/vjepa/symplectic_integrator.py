@@ -107,15 +107,15 @@ class SymplecticEulerIntegrator(nn.Module):
         for _ in range(steps):
             # --- Kick: update p using dH/dq ---
             with torch.enable_grad():
-                q_g = q.detach().requires_grad_(True)
-                p_g = p.detach()  # p held fixed during kick
+                q_g = q.requires_grad_(True)
+                p_g = p
                 H = self.hamiltonian(q_g, p_g).sum()
                 dH_dq = torch.autograd.grad(H, q_g, create_graph=True)[0]
             p = p - dt_step * dH_dq
 
             # --- Drift: update q using dH/dp ---
             with torch.enable_grad():
-                q_g = q.detach()  # q held fixed during drift
+                q_g = q
                 p_g = p.requires_grad_(True)
                 H = self.hamiltonian(q_g, p_g).sum()
                 dH_dp = torch.autograd.grad(H, p_g, create_graph=True)[0]

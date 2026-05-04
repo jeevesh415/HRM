@@ -47,11 +47,9 @@ class LieGroupEquivariantLayer(nn.Module):
         
         return F.linear(x_rot, self.weight)
 
-import nerfacc
-
 class LatentRayMarcher(nn.Module):
     """
-    High-Fidelity Volumetric Latent Ray-Marcher utilizing SOTA 'nerfacc' library.
+    High-Fidelity Volumetric Latent Ray-Marcher.
     Treats the latent space as a Neural Radiance Field (NeRF).
     Integrates density and features along light rays with extreme efficiency and rigor.
     """
@@ -78,8 +76,7 @@ class LatentRayMarcher(nn.Module):
         bs, n, d = latents.shape
         device = latents.device
         
-        # SOTA: nerfacc uses packed rays and intervals for massive speedups.
-        # For simplicity of the latent integration, we map our latents to ray samples.
+        # Map latents to ray samples for volumetric integration.
         t_vals = torch.linspace(0.0, 1.0, self.num_samples, device=device)
         
         # Evolve all samples efficiently in parallel
@@ -92,7 +89,7 @@ class LatentRayMarcher(nn.Module):
         sigmas = F.softplus(self.density_net(flat_samples)).squeeze(-1)
         features = self.feature_net(flat_samples)
         
-        # Compute transmittance and alpha using nerfacc's highly optimized accumulate
+        # Compute transmittance and alpha compositing
         # We define uniform distances for simplicity in latent space
         t_starts = t_vals[:-1]
         t_ends = t_vals[1:]

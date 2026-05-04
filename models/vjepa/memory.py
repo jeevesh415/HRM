@@ -241,11 +241,10 @@ class HolographicMemory(nn.Module):
         return torch.fft.ifft(key_fourier * value_fourier).real
 
     def _unbind_fhrr(self, composite: torch.Tensor, key: torch.Tensor) -> torch.Tensor:
-        """Unbind FHRR by dividing Fourier coefficients."""
+        """Unbind FHRR using conjugate multiplication (numerically stable)."""
         comp_fourier = torch.fft.fft(composite)
         key_fourier = torch.fft.fft(key)
-        # Division in Fourier domain (with regularization)
-        return torch.fft.ifft(comp_fourier / (key_fourier + 1e-8)).real
+        return torch.fft.ifft(comp_fourier * key_fourier.conj()).real
 
     def bind(self, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         """Bind key and value vectors."""

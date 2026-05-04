@@ -108,10 +108,10 @@ class VelocityField(nn.Module):
         h = self.net[1](h)  # first silu
 
         # FiLM modulation from time and condition
-        t_scale = self.film_time(t_emb).unsqueeze(1) if t_emb.ndim < h.ndim else self.film_time(t_emb)
-        c_scale = self.film_cond(c_emb).unsqueeze(1) if c_emb.ndim < h.ndim else self.film_cond(c_emb)
+        t_scale = self.film_time(t_emb)  # (bs, dim)
+        c_scale = self.film_cond(c_emb)  # (bs, dim)
 
-        # Apply FiLM: scale and shift
+        # FiLM: scale by time, shift by condition
         h = h * (1 + t_scale) + c_scale
 
         # Remaining layers
