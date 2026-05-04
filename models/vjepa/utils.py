@@ -28,11 +28,17 @@ def apply_mask(x, mask):
     if mask.ndim == 1:
         mask = mask.unsqueeze(0).expand(bs, -1)
         
+    if mask.ndim == 2:
+        visible_counts = (~mask).sum(dim=1)
+        masked_counts = mask.sum(dim=1)
+        if not torch.all(visible_counts.eq(visible_counts[0])) or not torch.all(masked_counts.eq(masked_counts[0])):
+            raise ValueError("All samples must have the same number of visible/masked patches for batched stacking.")
+
     visible_patches = []
     masked_patches = []
-    
+
     for i in range(bs):
         visible_patches.append(x[i, ~mask[i]])
         masked_patches.append(x[i, mask[i]])
-        
+
     return torch.stack(visible_patches), torch.stack(masked_patches)
