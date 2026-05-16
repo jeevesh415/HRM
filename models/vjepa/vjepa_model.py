@@ -61,6 +61,15 @@ class VJEPA(nn.Module):
             nn.Linear(predictor_config["hidden_size"], 1)
         )
 
+        # 5b. Policy query head for action-prior scoring in latent MCTS.
+        # Produces an action-space query vector that can be matched against
+        # candidate action vectors via dot-product similarity.
+        self.policy_query_head = nn.Sequential(
+            nn.Linear(predictor_config["hidden_size"], predictor_config["hidden_size"]),
+            nn.SiLU(),
+            nn.Linear(predictor_config["hidden_size"], action_dim)
+        )
+
         # 6. Adaptive depth controller for test-time compute scaling
         self.depth_controller = AdaptiveDepthController(
             max_depth=predictor_config.get("halt_max_steps", 8),

@@ -1,4 +1,5 @@
 import os
+import argparse
 import yaml
 import torch
 from torch import nn
@@ -169,7 +170,8 @@ def train(config_path="config/vjepa_micro.yaml"):
 
     # 5. Training Loop
     model.train()
-    for epoch in range(100):
+    epochs = int(config.get("training", {}).get("epochs", 100))
+    for epoch in range(epochs):
         for i, batch in enumerate(dataloader):
             # Move batch to device
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
@@ -204,4 +206,11 @@ def train(config_path="config/vjepa_micro.yaml"):
                 # wandb.log({"loss": loss.item()})
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Train V-JEPA/HRM model")
+    parser.add_argument(
+        "--config",
+        default="config/vjepa_micro.yaml",
+        help="Path to YAML config file (e.g., config/vjepa_micro.yaml or config/vjepa_10b.yaml)",
+    )
+    args = parser.parse_args()
+    train(args.config)
