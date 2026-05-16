@@ -172,7 +172,7 @@ class MCTS:
         Returns:
             next_state: (1, D) predicted next state.
             value: scalar value estimate of the next state.
-            policy_logits: (1, num_actions) action prior logits.
+            policy_query: (1, action_dim) action-prior query embedding.
         """
         # Use the physics engine for dynamics prediction
         delta_t = torch.ones(state.shape[0], device=state.device)
@@ -183,11 +183,11 @@ class MCTS:
             next_state.mean(dim=1) if next_state.ndim > 2 else next_state
         ).item()
 
-        # Estimate action priors (simple: use cosine similarity with available actions)
-        # In a full implementation, this would come from a policy network
-        policy_logits = torch.zeros(1, device=state.device)  # placeholder
+        # Estimate action priors from a learned policy-query head.
+        pooled_next_state = next_state.mean(dim=1) if next_state.ndim > 2 else next_state
+        policy_query = self.model.policy_query_head(pooled_next_state)
 
-        return next_state, value, policy_logits
+        return next_state, value, policy_query
 
     def _select(self, node: MCTSNode) -> MCTSNode:
         """
@@ -223,7 +223,7 @@ class MCTS:
         self,
         node: MCTSNode,
         available_actions: torch.Tensor,
-        policy_logits: Optional[torch.Tensor] = None,
+        policy_query: Optional[torch.Tensor] = None,
     ) -> float:
         """
         Expand a node by creating children for available actions.
@@ -234,7 +234,7 @@ class MCTS:
         Args:
             node: the node to expand.
             available_actions: (num_actions, action_dim) action set.
-            policy_logits: (num_actions,) optional prior logits.
+            policy_query: (1, action_dim) optional action-prior query vector.
 
         Returns:
             Value estimate of the expanded node.
@@ -248,9 +248,18 @@ class MCTS:
         max_children = max(1, int(self.pw_c * (node.visits + 1) ** self.pw_alpha))
         max_children = min(max_children, num_actions)
 
-        # Compute priors from policy logits
-        if policy_logits is not None and policy_logits.numel() > 0:
-            priors = F.softmax(policy_logits[:num_actions] / self.temperature, dim=0)
+        # Compute priors from policy query vector.
+        if policy_query is None and hasattr(self.model, "policy_query_head"):
+            with torch.no_grad():
+                pooled_state = node.state.mean(dim=1) if node.state.ndim > 2 else node.state
+                policy_query = self.model.policy_query_head(pooled_state)
+
+        if policy_query is not None and policy_query.numel() > 0:
+            # Similarity(action_i, query) -> prior logit
+            # available_actions: (num_actions, action_dim)
+            # policy_query: (1, action_dim)
+            logits = torch.matmul(available_actions, policy_query.squeeze(0))
+            priors = F.softmax(logits / self.temperature, dim=0)
         else:
             # Uniform prior if no policy network
             priors = torch.ones(num_actions, device=available_actions.device) / num_actions
