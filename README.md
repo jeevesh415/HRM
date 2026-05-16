@@ -90,6 +90,15 @@ python vjepa_train.py --config config/vjepa_10b.yaml
 - For phase-1 rigorous world-model checks, run:
   `python evaluate_world_model.py --config config/vjepa_micro.yaml --seed 42`
   (saves JSON manifests in `eval_runs/`).
+- For perception robustness checks (color/shadow/noise/shift), run:
+  `python evaluate_perception.py --config config/vjepa_micro.yaml --seed 42`
+  (saves JSON manifests in `eval_runs/`).
+
+### Final Execution Checklist (Do This)
+1. `python -m compileall -q .`
+2. `python evaluate_world_model.py --config config/vjepa_micro.yaml --seed 42`
+3. `python evaluate_perception.py --config config/vjepa_micro.yaml --seed 42`
+4. `python vjepa_train.py --config config/vjepa_micro.yaml` (with real videos in `data/`, or with `ffmpeg` installed)
 
 ---
 
