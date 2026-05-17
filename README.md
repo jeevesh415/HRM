@@ -1,9 +1,8 @@
-# Hierarchical Reasoning Model (HRM) + V-JEPA
+# Visual Execution Model (VEM)
 
-An advanced research codebase for **continuous-time world modeling** from video, combining:
-- **HRM** (hierarchical latent reasoning),
-- **V-JEPA** (self-supervised predictive representation learning),
-- and mathematically grounded modules for dynamics, geometry, planning, and uncertainty.
+A single integrated framework for **continuous-time world modeling** from video.
+
+Visual Execution Model (VEM) unifies hierarchical reasoning, predictive representation learning, dynamics, geometry, planning, uncertainty, and multimodal grounding inside one model stack (not separate models).
 
 ---
 
@@ -13,7 +12,7 @@ Build a practical foundation for models that can:
 2. Reason over future latent trajectories,
 3. Support intervention-aware planning in latent space.
 
-This repository transitions from discrete puzzle-style reasoning to **continuous latent dynamics** with explicit architectural support for long-horizon prediction.
+This repository is organized as one unified model pipeline with scalable sizes and optional modules, so every capability is part of the same framework and execution graph.
 
 ## Vision
 Our vision is a model that develops robust **intuitive physics** (e.g., continuity, object permanence, motion consistency, and causal effects of actions) by combining representation learning, geometric priors, and dynamics-aware objectives.
@@ -68,11 +67,11 @@ Deliver a scalable and analyzable training stack that can evolve from micro-scal
 
 ---
 
-## Repository Workflow
+## Repository Workflow (Single Framework)
 
 ### Configurations
-- **Micro / local iteration**: `config/vjepa_micro.yaml`
-- **Large-scale profile**: `config/vjepa_10b.yaml`
+- **Micro scale profile (same model, small size)**: `config/vjepa_micro.yaml`
+- **Large scale profile (same model, 10B-class size target)**: `config/vjepa_10b.yaml`
 
 ### Training Entrypoint
 ```bash
@@ -81,7 +80,7 @@ python vjepa_train.py --config config/vjepa_micro.yaml
 python vjepa_train.py --config config/vjepa_10b.yaml
 ```
 
-`vjepa_train.py` accepts `--config` and loads runtime behavior from YAML.  
+`vjepa_train.py` accepts `--config` and loads runtime behavior from YAML. Both configs run the same Visual Execution Model framework at different scales.  
 `training.epochs` can be set in YAML (defaults to `100` if omitted).
 
 ### Practical Notes

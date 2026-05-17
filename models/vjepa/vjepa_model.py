@@ -11,7 +11,7 @@ from models.adaptive_depth import AdaptiveDepthController
 
 class VJEPA(nn.Module):
     """
-    Unified V-JEPA Model with HRM-ODE Predictor and Holographic Memory.
+    Visual Execution Model (VEM): unified single-framework model.
     Designed for 10B parameter physical world modeling.
 
     Enhancements over base:
@@ -134,3 +134,8 @@ class VJEPA(nn.Module):
             "all_context": all_latents,
             "value": value
         }
+
+
+class VisualExecutionModel(VJEPA):
+    """Backward-compatible alias for the unified Visual Execution Model name."""
+    pass
