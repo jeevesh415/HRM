@@ -1,4 +1,6 @@
 import os
+import argparse
+import shutil
 import yaml
 import torch
 from torch import nn
@@ -148,10 +150,14 @@ def train(config_path="config/vjepa_micro.yaml"):
         os.makedirs(video_dir)
         print(f"Created directory {video_dir}. Please add videos here.")
         import subprocess
-        subprocess.run([
-            'ffmpeg', '-f', 'lavfi', '-i', 'testsrc=duration=5:size=224x224:rate=15', 
-            os.path.join(video_dir, 'test_video.mp4'), '-y'
-        ], capture_output=True)
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if ffmpeg_bin is None:
+            print("ffmpeg not found; skipping synthetic video generation. Add videos manually to data/.")
+        else:
+            subprocess.run([
+                ffmpeg_bin, '-f', 'lavfi', '-i', 'testsrc=duration=5:size=224x224:rate=15',
+                os.path.join(video_dir, 'test_video.mp4'), '-y'
+            ], capture_output=True, check=False)
         
     video_paths = [os.path.join(video_dir, f) for f in os.listdir(video_dir) if f.endswith(('.mp4', '.avi', '.mov'))]
     if not video_paths:
@@ -169,7 +175,8 @@ def train(config_path="config/vjepa_micro.yaml"):
 
     # 5. Training Loop
     model.train()
-    for epoch in range(100):
+    epochs = int(config.get("training", {}).get("epochs", 100))
+    for epoch in range(epochs):
         for i, batch in enumerate(dataloader):
             # Move batch to device
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
@@ -204,4 +211,11 @@ def train(config_path="config/vjepa_micro.yaml"):
                 # wandb.log({"loss": loss.item()})
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Train V-JEPA/HRM model")
+    parser.add_argument(
+        "--config",
+        default="config/vjepa_micro.yaml",
+        help="Path to YAML config file (e.g., config/vjepa_micro.yaml or config/vjepa_10b.yaml)",
+    )
+    args = parser.parse_args()
+    train(args.config)

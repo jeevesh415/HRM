@@ -154,8 +154,6 @@ class AdaptiveDepthWrapper(nn.Module):
         Runs the model iteratively, checking confidence at each step.
         Halts early for confident samples, continues for uncertain ones.
         """
-        from models.hrm.hrm_act_v1 import HierarchicalReasoningModel_ACTV1Carry
-
         # Initialize
         new_inner_carry = self.model.inner.reset_carry(carry.halted, carry.inner_carry)
         new_steps = torch.where(carry.halted, 0, carry.steps)
@@ -192,8 +190,6 @@ class AdaptiveDepthWrapper(nn.Module):
             outputs["depth_info"] = depth_info
 
         return (
-            HierarchicalReasoningModel_ACTV1Carry(
-                new_inner_carry, new_steps, halted, new_current_data
-            ),
+            type(carry)(new_inner_carry, new_steps, halted, new_current_data),
             outputs,
         )
