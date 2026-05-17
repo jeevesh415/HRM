@@ -2,7 +2,7 @@
 
 Comprehensive repository address map. Updated to current line-level state.
 
-Total files indexed: **48**
+Total files indexed: **59**
 
 ## `.github/workflows/sync-from-upstream.yml`
 - Type: text
@@ -62,6 +62,11 @@ Total files indexed: **48**
   - L96: `### Final Execution Checklist (Do This)`
   - L104: `## Roadmap Direction`
 
+## `arc_eval.ipynb`
+- Type: text
+- Total lines: 252
+- Address anchors: none detected
+
 ## `assets/hrm.png`
 - Type: binary/non-utf8
 - Total lines: 0
@@ -79,6 +84,44 @@ Total files indexed: **48**
   - L8: `def load_config(path: str):`
   - L13: `def main():`
 
+## `config/arch/hrm_v1.yaml`
+- Type: text
+- Total lines: 21
+- Address anchors:
+  - L1: `name: hrm.hrm_act_v1@HierarchicalReasoningModel_ACTV1`
+  - L2: `loss:`
+  - L6: `halt_exploration_prob: 0.1`
+  - L7: `halt_max_steps: 16`
+  - L9: `H_cycles: 2`
+  - L10: `L_cycles: 2`
+  - L12: `H_layers: 4`
+  - L13: `L_layers: 4`
+  - L15: `hidden_size: 512`
+  - L16: `num_heads: 8  # min(2, hidden_size // 64)`
+  - L17: `expansion: 4`
+  - L19: `puzzle_emb_ndim: ${.hidden_size}`
+  - L21: `pos_encodings: rope`
+
+## `config/cfg_pretrain.yaml`
+- Type: text
+- Total lines: 31
+- Address anchors:
+  - L3: `defaults:`
+  - L7: `hydra:`
+  - L11: `data_path: data/arc-aug-1000`
+  - L14: `global_batch_size: 768`
+  - L16: `epochs: 100000`
+  - L17: `eval_interval: 10000`
+  - L18: `checkpoint_every_eval: True`
+  - L20: `lr: 1e-4`
+  - L21: `lr_min_ratio: 1.0`
+  - L22: `lr_warmup_steps: 2000`
+  - L25: `beta1: 0.9`
+  - L26: `beta2: 0.95`
+  - L27: `weight_decay: 0.1`
+  - L28: `puzzle_emb_weight_decay: 0.1`
+  - L31: `puzzle_emb_lr: 1e-2`
+
 ## `config/vjepa_10b.yaml`
 - Type: text
 - Total lines: 85
@@ -94,6 +137,31 @@ Total files indexed: **48**
   - L2: `encoder:`
   - L14: `predictor:`
   - L27: `training:`
+
+## `dataset/build_arc_dataset.py`
+- Type: text
+- Total lines: 291
+- Address anchors:
+  - L19: `class DataProcessConfig(BaseModel):`
+  - L37: `class ARCPuzzle:`
+  - L43: `def arc_grid_to_np(grid: List[List[int]]):`
+  - L54: `def np_grid_to_seq_translational_augment(inp: np.ndarray, out: np.ndarray, do_translation: bool):`
+  - L81: `def puzzle_hash(puzzle: dict):`
+  - L83: `def _grid_hash(grid: np.ndarray):`
+  - L98: `def convert_single_arc_puzzle(results: dict, default_name: str, puzzle: dict, aug_count: int, dest_mapping: Dict[str, Tuple[str, str]]):`
+  - L122: `def _map_grid(grid: np.ndarray):`
+  - L148: `def load_puzzles_arcagi(results: dict, dataset_path: str, config: DataProcessConfig):`
+  - L184: `def convert_dataset(config: DataProcessConfig):`
+  - L286: `def main(config: DataProcessConfig):`
+
+## `dataset/build_maze_dataset.py`
+- Type: text
+- Total lines: 142
+- Address anchors:
+  - L22: `class DataProcessConfig(BaseModel):`
+  - L30: `def convert_subset(set_name: str, config: DataProcessConfig):`
+  - L89: `def _seq_to_numpy(seq):`
+  - L136: `def preprocess_data(config: DataProcessConfig):`
 
 ## `dataset/common.py`
 - Type: text
@@ -153,6 +221,13 @@ Total files indexed: **48**
   - L25: `## Gate C — Change Promotion`
   - L31: `## Notes`
 
+## `evaluate.py`
+- Type: text
+- Total lines: 68
+- Address anchors:
+  - L13: `class EvalConfig(pydantic.BaseModel):`
+  - L19: `def launch():`
+
 ## `evaluate_perception.py`
 - Type: text
 - Total lines: 90
@@ -188,6 +263,31 @@ Total files indexed: **48**
 - Total lines: 32
 - Address anchors:
   - L7: `def trunc_normal_init_(tensor: torch.Tensor, std: float = 1.0, lower: float = -2.0, upper: float = 2.0):`
+
+## `models/hrm/hrm_act_v1.py`
+- Type: text
+- Total lines: 283
+- Address anchors:
+  - L16: `class HierarchicalReasoningModel_ACTV1InnerCarry:`
+  - L22: `class HierarchicalReasoningModel_ACTV1Carry:`
+  - L31: `class HierarchicalReasoningModel_ACTV1Config(BaseModel):`
+  - L60: `class HierarchicalReasoningModel_ACTV1Block(nn.Module):`
+  - L61: `def __init__(self, config: HierarchicalReasoningModel_ACTV1Config) -> None:`
+  - L77: `def forward(self, cos_sin: CosSin, hidden_states: torch.Tensor) -> torch.Tensor:`
+  - L86: `class HierarchicalReasoningModel_ACTV1ReasoningModule(nn.Module):`
+  - L87: `def __init__(self, layers: List[HierarchicalReasoningModel_ACTV1Block]):`
+  - L92: `def forward(self, hidden_states: torch.Tensor, input_injection: torch.Tensor, **kwargs) -> torch.Tensor:`
+  - L102: `class HierarchicalReasoningModel_ACTV1_Inner(nn.Module):`
+  - L103: `def __init__(self, config: HierarchicalReasoningModel_ACTV1Config) -> None:`
+  - L146: `def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: torch.Tensor):`
+  - L168: `def empty_carry(self, batch_size: int):`
+  - L174: `def reset_carry(self, reset_flag: torch.Tensor, carry: HierarchicalReasoningModel_ACTV1InnerCarry):`
+  - L180: `def forward(self, carry: HierarchicalReasoningModel_ACTV1InnerCarry, batch: Dict[str, torch.Tensor]) -> Tuple[HierarchicalReasoningModel_ACTV1InnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:`
+  - L216: `class HierarchicalReasoningModel_ACTV1(nn.Module):`
+  - L219: `def __init__(self, config_dict: dict):`
+  - L225: `def puzzle_emb(self):`
+  - L228: `def initial_carry(self, batch: Dict[str, torch.Tensor]):`
+  - L240: `def forward(self, carry: HierarchicalReasoningModel_ACTV1Carry, batch: Dict[str, torch.Tensor]) -> Tuple[HierarchicalReasoningModel_ACTV1Carry, Dict[str, torch.Tensor]]:`
 
 ## `models/hybrid_ssm.py`
 - Type: text
@@ -288,6 +388,18 @@ Total files indexed: **48**
   - L204: `def __init__(`
   - L243: `def _positional_encoding(self, positions: torch.Tensor) -> torch.Tensor:`
   - L259: `def forward(`
+
+## `models/sparse_embedding.py`
+- Type: text
+- Total lines: 132
+- Address anchors:
+  - L11: `class CastedSparseEmbedding(nn.Module):`
+  - L12: `def __init__(self, num_embeddings: int, embedding_dim: int, batch_size: int, init_std: float, cast_to: torch.dtype):`
+  - L28: `def forward(self, inputs: torch.Tensor) -> torch.Tensor:`
+  - L41: `class CastedSparseEmbeddingSignSGD_Distributed(Optimizer):`
+  - L42: `def __init__(`
+  - L63: `def step(self, closure=None):  # type: ignore`
+  - L98: `def _sparse_emb_signsgd_dist(`
 
 ## `models/spectral_conv.py`
 - Type: text
@@ -498,6 +610,46 @@ Total files indexed: **48**
   - L81: `def update_target_encoder(self):`
   - L86: `def forward(self, batch: Dict[str, torch.Tensor]):`
   - L139: `class VisualExecutionModel(VJEPA):`
+
+## `pretrain.py`
+- Type: text
+- Total lines: 453
+- Address anchors:
+  - L26: `class LossConfig(pydantic.BaseModel):`
+  - L32: `class ArchConfig(pydantic.BaseModel):`
+  - L39: `class PretrainConfig(pydantic.BaseModel):`
+  - L74: `class TrainState:`
+  - L84: `def create_dataloader(config: PretrainConfig, split: str, rank: int, world_size: int, **kwargs):`
+  - L108: `def create_model(config: PretrainConfig, train_metadata: PuzzleDatasetMetadata, world_size: int):`
+  - L162: `def cosine_schedule_with_warmup_lr_lambda(`
+  - L172: `def init_train_state(config: PretrainConfig, train_metadata: PuzzleDatasetMetadata, world_size: int):`
+  - L190: `def save_train_state(config: PretrainConfig, train_state: TrainState):`
+  - L199: `def compute_lr(base_lr: float, config: PretrainConfig, train_state: TrainState):`
+  - L209: `def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, global_batch_size: int, rank: int, world_size: int):`
+  - L266: `def evaluate(config: PretrainConfig, train_state: TrainState, eval_loader: torch.utils.data.DataLoader, eval_metadata: PuzzleDatasetMetadata, rank: int, world_size: int):`
+  - L333: `def save_code_and_config(config: PretrainConfig):`
+  - L359: `def load_synced_config(hydra_config: DictConfig, rank: int, world_size: int) -> PretrainConfig:`
+  - L381: `def launch(hydra_config: DictConfig):`
+
+## `puzzle_dataset.py`
+- Type: text
+- Total lines: 199
+- Address anchors:
+  - L14: `def _sample_batch(rng: np.random.Generator, group_order: np.ndarray, puzzle_indices: np.ndarray, group_indices: np.ndarray, start_index: int, global_batch_size: int):`
+  - L41: `class PuzzleDatasetConfig(pydantic.BaseModel):`
+  - L53: `class PuzzleDataset(IterableDataset):`
+  - L54: `def __init__(self, config: PuzzleDatasetConfig, split: str = "train"):`
+  - L68: `def _load_metadata(self) -> PuzzleDatasetMetadata:`
+  - L72: `def _lazy_load_dataset(self):`
+  - L95: `def _collate_batch(self, batch):`
+  - L118: `def _iter_test(self):`
+  - L151: `def _iter_train(self):`
+  - L189: `def __iter__(self):`
+
+## `puzzle_visualizer.html`
+- Type: text
+- Total lines: 426
+- Address anchors: none detected
 
 ## `requirements.txt`
 - Type: text
