@@ -120,17 +120,17 @@ class DifferentiableBettiNumbers(nn.Module):
             components = (degree / (degree.sum(dim=-1, keepdim=True) + 1e-6)).sum(dim=-1)
             component_counts.append(components)
 
-        component_counts = torch.stack(component_counts, dim=-1)  # (bs, n, num_steps)
+        component_counts = torch.stack(component_counts, dim=-1)  # (bs, num_steps)
 
         # Betti-0: max components across filtration (persistent)
-        betti_0 = component_counts.max(dim=-1).values.mean(dim=-1, keepdim=True)
+        betti_0 = component_counts.max(dim=-1, keepdim=True).values
 
         # Betti-1: loops appear when components merge but don't fill in
         # Approximate: count "births" of 1-cycles
         # A 1-cycle is born when two previously separate components connect
         # but the enclosed region is not yet filled
-        diffs = component_counts[:, :, 1:] - component_counts[:, :, :-1]
-        loop_evidence = (diffs < 0).float().sum(dim=-1).mean(dim=-1, keepdim=True)
+        diffs = component_counts[:, 1:] - component_counts[:, :-1]
+        loop_evidence = (diffs < 0).float().sum(dim=-1, keepdim=True)
         betti_1 = torch.sigmoid(loop_evidence)
 
         # Topological feature vector: combines local and global topology
