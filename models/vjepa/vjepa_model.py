@@ -11,7 +11,7 @@ from models.adaptive_depth import AdaptiveDepthController
 
 class VJEPA(nn.Module):
     """
-    Unified V-JEPA Model with HRM-ODE Predictor and Holographic Memory.
+    Visual Execution Model (VEM): unified single-framework model.
     Designed for 10B parameter physical world modeling.
 
     Enhancements over base:
@@ -59,6 +59,15 @@ class VJEPA(nn.Module):
             nn.Linear(predictor_config["hidden_size"], predictor_config["hidden_size"]),
             nn.SiLU(),
             nn.Linear(predictor_config["hidden_size"], 1)
+        )
+
+        # 5b. Policy query head for action-prior scoring in latent MCTS.
+        # Produces an action-space query vector that can be matched against
+        # candidate action vectors via dot-product similarity.
+        self.policy_query_head = nn.Sequential(
+            nn.Linear(predictor_config["hidden_size"], predictor_config["hidden_size"]),
+            nn.SiLU(),
+            nn.Linear(predictor_config["hidden_size"], action_dim)
         )
 
         # 6. Adaptive depth controller for test-time compute scaling
@@ -125,3 +134,8 @@ class VJEPA(nn.Module):
             "all_context": all_latents,
             "value": value
         }
+
+
+class VisualExecutionModel(VJEPA):
+    """Backward-compatible alias for the unified Visual Execution Model name."""
+    pass
