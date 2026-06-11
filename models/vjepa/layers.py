@@ -33,17 +33,17 @@ class LieGroupEquivariantLayer(nn.Module):
         x: (bs, seq_len, dim)
         group_element: (bs, 3) - Rotation/Translation parameters
         """
-        # (Simplified elite projection for mobile-scale verification using GeoOpt parameters)
+        # SOTA: Sample-specific relativity
         norm_factor = torch.norm(group_element, dim=-1, keepdim=True) + 1e-6
-        alpha = group_element / norm_factor
+        alpha = (group_element / norm_factor).unsqueeze(1) # (bs, 1, 3)
         
         # Project x onto the strict Stiefel manifold defined by A and B
         proj_a = torch.einsum('bsd,dr->bsr', x, self.A)
         proj_b = torch.einsum('bsd,dr->bsr', x, self.B)
         
-        # Equivariant rotation in the subspace
-        x_rot = x + torch.einsum('bsr,dr->bsd', proj_a, self.B) * alpha.unsqueeze(1).mean()
-        x_rot = x_rot - torch.einsum('bsr,dr->bsd', proj_b, self.A) * alpha.unsqueeze(1).mean()
+        # Equivariant rotation in the subspace (Sample-specific)
+        x_rot = x + torch.einsum('bsr,dr->bsd', proj_a, self.B) * alpha
+        x_rot = x_rot - torch.einsum('bsr,dr->bsd', proj_b, self.A) * alpha
         
         return F.linear(x_rot, self.weight)
 

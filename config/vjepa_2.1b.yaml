@@ -1,0 +1,31 @@
+training:
+  batch_size: 4
+  epochs: 100
+  learning_rate: 0.0001
+  warmup_steps: 1000
+  mask_ratio: 0.75
+
+model:
+  embed_dim: 2048
+  depth: 20
+  num_heads: 32
+  expansion: 4.0
+  max_t: 16
+  max_h: 14
+  max_w: 14
+  patch_size: [2, 16, 16]
+
+predictor:
+  hidden_size: 2048
+  num_heads: 32
+  expansion: 4.0
+  H_cycles: 4
+  L_cycles: 8
+  use_gaussian_splatting: true
+  num_gaussians: 256
+  use_latent_memory_palace: true # New Frontier Integration
+
+dataset:
+  video_dir: "data/"
+  frame_size: [224, 224]
+  num_frames: 16

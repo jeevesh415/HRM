@@ -158,6 +158,19 @@ class SwiGLU(nn.Module):
         return self.down_proj(F.silu(gate) * up)
 
 
+class RMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-5):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        input_dtype = x.dtype
+        x = x.to(torch.float32)
+        variance = x.square().mean(-1, keepdim=True)
+        x = x * torch.rsqrt(variance + self.eps)
+        return (x * self.weight.to(torch.float32)).to(input_dtype)
+
 def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float) -> torch.Tensor:
     input_dtype = hidden_states.dtype
     hidden_states = hidden_states.to(torch.float32)
