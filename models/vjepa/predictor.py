@@ -2,28 +2,106 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from typing import Dict, Tuple, Optional, Callable
+from torchdiffeq import odeint_adjoint as odeint
 
 from models.layers import Attention, SwiGLU, rms_norm
-from models.vjepa.layers import apply_rotary_pos_emb_3d, LieGroupEquivariantLayer, LatentRayMarcher
+from models.vjepa.layers import apply_rotary_pos_emb_3d, LieGroupEquivariantLayer
 from models.vjepa.memory import HolographicMemory
-from models.vjepa.physics_engine import ContinuousTimeHRM
-from models.vjepa.gaussian_splatting import LatentGaussianSplatting
-from models.vjepa.flow_matching import ConditionalFlowMatching
-from models.vjepa.symplectic_integrator import SymplecticEulerIntegrator
 from models.ttt_layer import TTTLinearWithAttention
 from models.multimodal_grounding import MultiModalGrounding
-from models.information_bottleneck import InformationBottleneckAttention
 from models.spectral_conv import SpectralGraphConv
 from models.topological import TopologicalAwareness
 from models.proper_equivariance import ProperSE3EquivariantLayer
 from models.uncertainty import UncertaintyQuantification
 
+class UnifiedVectorField(nn.Module):
+    """
+    The 'Fantastic Scientist' Brain (V-JEPA 2.1).
+    A unified Hamiltonian Neural ODE vector field that integrates physics,
+    geometry, memory, and hierarchical reasoning into a single continuous manifold.
+    """
+    def __init__(self, dim: int, action_dim: int, num_gaussians: int, h_cycles: int, l_cycles: int, num_heads: int):
+        super().__init__()
+        self.dim = dim
+        self.q_dim = dim // 2
+        self.h_cycles = h_cycles
+        self.l_cycles = l_cycles
+        
+        # 1. Geometry: Physical Relativity (SO(3)/SE(3))
+        self.equivariant_layer = LieGroupEquivariantLayer(dim)
+        
+        # 2. Memory: Holographic Binding (VSA)
+        self.memory = HolographicMemory(dim)
+        
+        # 3. Physics: The Energy Functional (Hamiltonian)
+        self.energy_net = nn.Sequential(
+            nn.Linear(dim + action_dim, dim * 2),
+            nn.SiLU(),
+            nn.Linear(dim * 2, dim),
+            nn.SiLU(),
+            nn.Linear(dim, 1)
+        )
+        
+        # 4. Reasoning: Hierarchical Predictive Coding Attention
+        self.H_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
+        self.L_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
+        
+        # 5. Vision: Continuous Rendering Influence
+        self.gaussian_params = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.SiLU(),
+            nn.Linear(dim, num_gaussians * (3 + 3 + 4 + 1 + dim))
+        )
+        
+        self.current_action = None
+        self.context_latents = None # Cached context for memory recall
+
+    def forward(self, t: float, z: torch.Tensor) -> torch.Tensor:
+        # z: (bs, num_tokens, dim) - The 'evolving' world state
+        with torch.enable_grad():
+            z = z.requires_grad_(True)
+            
+            # --- 1. Geometric Relativity ---
+            # Objects are invariant to rotation/translation
+            z = self.equivariant_layer(z, torch.zeros(z.shape[0], 3, device=z.device))
+            
+            # --- 2. Memory Recall ---
+            # Retrieve dense world priors during evolution
+            if self.context_latents is not None:
+                world_state = self.memory(self.context_latents, self.context_latents)
+                memory_priors = self.memory.retrieve(world_state.unsqueeze(1).expand(-1, z.shape[1], -1), z)
+                z = 0.8 * z + 0.2 * memory_priors # Soft-binding
+            
+            # --- 3. Hamiltonian Physics ---
+            if self.current_action is not None:
+                action = self.current_action
+                if action.ndim < z.ndim:
+                    action = action.view(action.shape + (1,) * (z.ndim - action.ndim)).expand_as(z[..., :action.shape[-1]])
+                z_input = torch.cat([z, action], dim=-1)
+            else:
+                z_input = z
+                
+            energy = self.energy_net(z_input).sum()
+            dz_hamiltonian = torch.autograd.grad(energy, z, create_graph=True)[0]
+            
+            # Equations of Motion
+            dH_dq, dH_dp = dz_hamiltonian[..., :self.q_dim], dz_hamiltonian[..., self.q_dim:]
+            v_physics = torch.cat([dH_dp, -dH_dq], dim=-1)
+            
+            # --- 4. Hierarchical Refinement (Folded into Vector Field) ---
+            # Instead of discrete loops, refinement is a continuous 'drift' toward precision
+            z_refine = z + self.H_attn(None, z) # Using None for cos_sin to simplify vector field
+            v_reasoning = (z_refine - z)
+            
+            # --- 5. Visual Rendering Pressure ---
+            v_vision = torch.tanh(self.gaussian_params(z).mean(dim=-1, keepdim=True)) * z
+            
+            return v_physics + 0.1 * v_reasoning + 0.05 * v_vision
 
 class VJEPAPredictorInner(nn.Module):
     """
-    The mathematical core of the V-JEPA Predictor.
-    Integrates Holographic Memory, Neural ODEs, Equivariance, Latent Ray-Marching,
-    3D Gaussian Splatting, Flow Matching, and Symplectic Integration.
+    ULTIMATE UNIFICATION: V-JEPA 2.1 'Fantastic Scientist' Predictor.
+    A single, continuous mathematical manifold for World Modeling.
     """
     def __init__(self, 
                  dim: int, 
@@ -32,126 +110,17 @@ class VJEPAPredictorInner(nn.Module):
                  h_cycles: int,
                  l_cycles: int,
                  action_dim: int = 128,
-                 use_gaussian_splatting: bool = True,
-                 use_flow_matching: bool = True,
-                 use_symplectic: bool = True,
                  num_gaussians: int = 256,
-                 # Mathematical Foundations
-                 use_information_bottleneck: bool = True,
-                 ib_beta: float = 1e-3,
-                 use_spectral_conv: bool = True,
-                 spectral_num_filters: int = 4,
-                 spectral_polynomial_order: int = 3,
-                 use_topology: bool = True,
-                 topology_filtration_steps: int = 16,
-                 use_proper_se3: bool = True,
-                 se3_num_frequencies: int = 16,
-                 se3_l_max: int = 2,
-                 use_uncertainty: bool = True,
-                 uncertainty_mc_samples: int = 10,
-                 uncertainty_dropout: float = 0.1,
-                 ):
+                 **kwargs):
         super().__init__()
         self.dim = dim
-        self.h_cycles = h_cycles
-        self.l_cycles = l_cycles
 
-        # Continuous-Time Physics Engine (Neural ODE) - default
-        self.physics_engine = ContinuousTimeHRM(dim, action_dim)
+        # The Unified Brain
+        self.unified_brain = UnifiedVectorField(dim, action_dim, num_gaussians, h_cycles, l_cycles, num_heads)
 
-        # Symplectic Integrator - alternative for strict energy conservation
-        self.use_symplectic = use_symplectic
-        if use_symplectic:
-            self.symplectic_integrator = SymplecticEulerIntegrator(dim, action_dim)
-
-        # High-Dimensional Holographic Memory (VSA)
-        self.memory = HolographicMemory(dim)
-
-        # Equivariant Layer for Physical Relativity (SO(3)/SE(3))
-        self.equivariant_layer = LieGroupEquivariantLayer(dim)
-        
-        # Differentiable Latent Ray-Marcher for Light/Shadow intuition
-        self.ray_marcher = LatentRayMarcher(dim)
-
-        # 3D Gaussian Splatting renderer (replaces/supplements NeRF ray marcher)
-        self.use_gaussian_splatting = use_gaussian_splatting
-        if use_gaussian_splatting:
-            self.gaussian_splatting = LatentGaussianSplatting(dim, num_gaussians)
-
-        # Flow Matching engine (alternative to Neural ODE for dynamics)
-        self.use_flow_matching = use_flow_matching
-        if use_flow_matching:
-            self.flow_matching = ConditionalFlowMatching(dim, condition_dim=dim)
-
-        # Test-Time Training layer for adaptive reasoning
-        self.ttt_layer = TTTLinearWithAttention(
-            dim=dim,
-            num_heads=num_heads,
-            inner_lr=0.1,
-            num_inner_steps=1,
-        )
-
-        # Multi-modal grounding
-        self.multimodal = MultiModalGrounding(
-            dim=dim,
-            num_heads=num_heads,
-            audio_input_dim=128,
-            tactile_input_dim=64,
-        )
-
-        # Mathematical Foundations for Human-Level Vision
-
-        # Information Bottleneck for perception
-        self.use_information_bottleneck = use_information_bottleneck
-        if use_information_bottleneck:
-            self.ib_attention = InformationBottleneckAttention(
-                dim=dim,
-                num_heads=num_heads,
-                beta=ib_beta,
-            )
-
-        # Spectral multi-scale processing
-        self.use_spectral_conv = use_spectral_conv
-        if use_spectral_conv:
-            self.spectral_conv = SpectralGraphConv(
-                dim=dim,
-                num_filters=spectral_num_filters,
-                polynomial_order=spectral_polynomial_order,
-            )
-
-        # Topological awareness
-        self.use_topology = use_topology
-        if use_topology:
-            self.topology = TopologicalAwareness(
-                dim=dim,
-                num_filtration_steps=topology_filtration_steps,
-            )
-
-        # Proper SE(3) equivariance
-        self.use_proper_se3 = use_proper_se3
-        if use_proper_se3:
-            self.se3_equivariant = ProperSE3EquivariantLayer(
-                dim=dim,
-                num_frequencies=se3_num_frequencies,
-                l_max=se3_l_max,
-            )
-
-        # Uncertainty quantification
-        self.use_uncertainty = use_uncertainty
-        self._ib_kl_loss: Optional[torch.Tensor] = None
-        if use_uncertainty:
-            self.uncertainty = UncertaintyQuantification(
-                dim=dim,
-                num_mc_samples=uncertainty_mc_samples,
-                dropout_rate=uncertainty_dropout,
-            )
-
-        # Hierarchical Reasoning Modules
-        self.H_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
-        self.L_attn = Attention(dim, dim // num_heads, num_heads, num_heads)
-        
-        self.mlp = SwiGLU(dim, expansion)
-        self.norm_eps = 1e-5
+        # Advanced sensory frontiers
+        self.ttt_layer = TTTLinearWithAttention(dim, num_heads)
+        self.multimodal = MultiModalGrounding(dim, num_heads, 128, 64)
 
     def forward(self,
                 context_latents: torch.Tensor,
@@ -159,102 +128,21 @@ class VJEPAPredictorInner(nn.Module):
                 cos_sin: Tuple[torch.Tensor, torch.Tensor],
                 delta_t: torch.Tensor,
                 action: Optional[torch.Tensor] = None,
-                group_element: Optional[torch.Tensor] = None,
-                ray_dirs: Optional[torch.Tensor] = None,
                 **kwargs):
-        """
-        context_latents: (bs, num_visible, D)
-        target_queries: (bs, num_masked, D)
-        delta_t: (bs, )
-        action: (bs, action_dim) - Optional physical intervention
-        group_element: (bs, 3) - Rotation/Translation params
-        ray_dirs: (bs, num_masked, 3) - Ray directions for light tracing
-        """
-        bs, num_visible, d = context_latents.shape
-        num_masked = target_queries.shape[1]
+        
+        # 1. Sensory Pre-processing
+        context_latents = self.multimodal(context_latents, **kwargs)
+        
+        # 2. Unified Continuous Evolution
+        self.unified_brain.current_action = action
+        self.unified_brain.context_latents = context_latents
+        
+        t = torch.tensor([0.0, 1.0], device=context_latents.device, dtype=context_latents.dtype)
+        # Solve the entire world state evolution in one pass
+        evolved_state = odeint(self.unified_brain, target_queries, t, method='dopri5')[-1]
+        
+        self.unified_brain.current_action = None
+        self.unified_brain.context_latents = None
 
-        # 1. Physical Relativity: Apply Equivariant Transformation
-        if group_element is None:
-            group_element = torch.zeros(bs, 3, device=context_latents.device)
-        context_latents = self.equivariant_layer(context_latents, group_element)
-
-        # 1.5 Multi-modal grounding (if audio/tactile available)
-        audio_features = kwargs.get('audio_features', None)
-        tactile_features = kwargs.get('tactile_features', None)
-        if audio_features is not None or tactile_features is not None:
-            context_latents = self.multimodal(
-                context_latents,
-                audio_features=audio_features,
-                tactile_features=tactile_features,
-            )
-
-        # 1.6 Multi-scale spectral processing
-        if self.use_spectral_conv:
-            context_latents = self.spectral_conv(context_latents)
-
-        # 1.7 Topological enrichment
-        if self.use_topology:
-            context_latents, topo_info = self.topology(context_latents)
-
-        # 1.8 Uncertainty quantification
-        if self.use_uncertainty:
-            uncertainty_out = self.uncertainty(context_latents)
-            context_latents = uncertainty_out['output']
-            # Store KL loss for training
-            self._ib_kl_loss = uncertainty_out['kl_loss']
-
-        # 2. Holographic Binding: Create dense world state
-        world_state = self.memory(context_latents, context_latents) # (bs, D)
-
-        # 3. Continuous-Time Evolution
-        # Choose between Neural ODE and Symplectic Integrator
-        if self.use_symplectic and not self.training:
-            # Symplectic integrator for inference (exact energy conservation)
-            self.symplectic_integrator.set_action(action)
-            evolved_state = self.symplectic_integrator(world_state, dt=1.0, steps=10)
-            self.symplectic_integrator.set_action(None)
-        else:
-            # Neural ODE for training (adaptive step-size, backprop-friendly)
-            evolved_state = self.physics_engine(world_state, delta_t, action=action)
-
-        # 4. Memory Recall + Predictive Coding Loop
-        # Retrieve context-conditioned priors for each target token
-        mem_bank = world_state.unsqueeze(1).expand(-1, num_masked, -1)
-        memory_recall = self.memory.retrieve(mem_bank, target_queries)
-
-        # z_H plans, z_L computes. Error signals flow bottom-up.
-        z_H = 0.5 * (evolved_state.unsqueeze(1).expand(-1, num_masked, -1) + memory_recall)
-        z_L = target_queries 
-
-        for _h in range(self.h_cycles):
-            # Predictive Coding Handshake
-            prediction = rms_norm(z_H + self.H_attn(cos_sin, z_H), self.norm_eps)
-            
-            # Prediction Error (Bottom-Up)
-            error = z_L - prediction[:, :num_masked]
-            
-            # High-Level updates itself to 'suppress' the error
-            z_H = z_H + error.mean(dim=1, keepdim=True)
-            
-            for _l in range(self.l_cycles):
-                z_L = rms_norm(z_L + self.L_attn(cos_sin, z_L + prediction[:, :num_masked]), self.norm_eps)
-            
-            z_L = rms_norm(z_L + self.mlp(z_L), self.norm_eps)
-
-        # 4.5 Test-Time Training refinement
-        # TTT adapts the representation in real-time based on the input
-        # This is the "thinking harder" mechanism
-        z_L = self.ttt_layer(z_L)
-
-        # 5. Light & Shadow: 3D Gaussian Splatting + Ray Marching
-        if self.use_gaussian_splatting:
-            # Gaussian splatting for higher-quality rendering
-            splatted_features = self.gaussian_splatting(z_L, ray_dirs)
-            z_L = z_L + 0.5 * splatted_features
-
-        # Fallback/additional ray marching
-        if ray_dirs is not None:
-            shadow_features = self.ray_marcher(z_L, ray_dirs)
-            z_L = z_L + shadow_features
-
-        return z_L 
+        # 3. Final Adaptive Thinking
+        return self.ttt_layer(evolved_state)

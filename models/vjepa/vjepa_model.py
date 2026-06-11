@@ -89,35 +89,24 @@ class VJEPA(nn.Module):
         delta_t = batch.get("delta_t", torch.ones(video.shape[0], 1, device=video.device)) 
         action = batch.get("action", None)
         
-        # 1. Generate Target Latents (Full Video, No Gradients)
+        # 1. Generate Target Latents (Dense & Hierarchical)
+        # 2.1 Frontier: Supervise intermediate layers for deep self-supervision
+        target_layers = [4, 8, 12] if self.context_encoder.max_t > 4 else [0]
         with torch.no_grad():
-            target_latents = self.target_encoder(video) # (bs, seq_len, D)
+            target_all_layers = self.target_encoder(video, return_layers=target_layers) 
+            target_final = target_all_layers[-1]
             
-        # 2. Generate Context Latents (Masked Video)
+        # 2. Generate Context Latents (Online Encoder)
         all_latents = self.context_encoder(video)
         
-        # Extract visible patches for context
-        # Extract masked patches as targets
-        context_latents, target_latents_masked = apply_mask(all_latents, mask)
-        _, target_truth_masked = apply_mask(target_latents, mask)
-
-        # 3. Predictor Forward (Continuous-Time Reasoning)
+        # 3. Predictor Forward (Total Unification)
         full_cos, full_sin = self.context_encoder.rope(self.context_encoder.max_t, self.context_encoder.max_h, self.context_encoder.max_w)
-        
-        # Index cos_sin for masked positions
-        if mask.ndim == 1:
-            masked_cos = full_cos[mask]
-            masked_sin = full_sin[mask]
-        else:
-            masked_cos = torch.stack([full_cos[m_i] for m_i in mask], dim=0)
-            masked_sin = torch.stack([full_sin[m_i] for m_i in mask], dim=0)
+        masked_cos_sin = (full_cos, full_sin) # In 2.1, we often predict all tokens
 
-        masked_cos_sin = (masked_cos, masked_sin)
-
-        # Predict masked latents
+        # Predict all tokens (Dense Prediction)
         predicted_latents = self.predictor(
-            context_latents=context_latents,
-            target_queries=target_latents_masked,
+            context_latents=all_latents, # Dense context
+            target_queries=all_latents,  # Predict everything
             cos_sin=masked_cos_sin,
             delta_t=delta_t,
             action=action,
@@ -125,12 +114,9 @@ class VJEPA(nn.Module):
             tactile_features=batch.get("tactile", None),
         )
 
-        # Value estimation of the predicted future
-        value = self.value_head(predicted_latents.mean(dim=1))
-
         return {
             "predicted": predicted_latents,
-            "target": target_truth_masked,
+            "target": target_final,
+            "all_targets": target_all_layers,
             "all_context": all_latents,
-            "value": value
         }

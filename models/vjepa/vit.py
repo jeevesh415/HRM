@@ -83,12 +83,18 @@ class VisionEncoder(nn.Module):
         
         self.norm = nn.LayerNorm(embed_dim)
 
-    def forward(self, x):
+    def forward(self, x, return_layers: Optional[list] = None):
         # x: (bs, T, C, H, W)
         x, (t, h, w) = self.patch_embed(x)
         cos_sin = self.rope(t, h, w)
 
-        for block in self.blocks:
+        outputs = []
+        for i, block in enumerate(self.blocks):
             x = block(x, cos_sin)
+            if return_layers is not None and i in return_layers:
+                outputs.append(self.norm(x))
+        
+        if return_layers is not None:
+            return outputs
         
         return self.norm(x)
